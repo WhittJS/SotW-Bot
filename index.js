@@ -1,25 +1,41 @@
-const Discord = require('discord.js');
-//const { Client, Intents } = require('discord.js');
-const client = new Discord.Client({ intents: [Intents.FLAGS.GUILD_MESSAGES, Intents.FLAGS.GUILDS] });
-const token = ('OTA1NjE2ODkzNTAxNjU3MTQ4.YYMrdA.JR-Oko-OSD5Q0KJZbwBMuD5VsS4');
+const fs = require('fs');
+const { Client, Collection, Intents } = require('discord.js');
+const { token } = require('./config.json');
 
-client.login(token);
+const client = new Client({ intents: [Intents.FLAGS.GUILDS] });
 
-client.on('ready', () => {
-  console.log(`Logged in as ${client.user.tag}!`);
-});
+const eventFiles = fs.readdirSync('./events').filter(file => file.endsWith('.js'));
 
-/*client.on('message', msg => {
-  if(msg.content.toLowerCase() === 'ping') {
-    msg.reply('pong');
-  }
-});*/
+for (const file of eventFiles) {
+	const event = require(`./events/${file}`);
+	if (event.once) {
+		client.once(event.name, (...args) => event.execute(...args));
+	} else {
+		client.on(event.name, (...args) => event.execute(...args));
+	}
+}
+
+client.commands = new Collection();
+const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
+
+for (const file of commandFiles) {
+	const command = require(`./commands/${file}`);
+	client.commands.set(command.data.name, command);
+}
 
 client.on('interactionCreate', async interaction => {
+	if (!interaction.isCommand()) return;
 
-  if (!interaction.isCommand()) return;
+  const command = client.commands.get(interaction.commandName);
 
-  if (interaction.commandName === 'ping') {
-    await interaction.reply('Pong!');
-  }
-})
+  	if (!command) return;
+
+  	try {
+  		await command.execute(interaction);
+  	} catch (error) {
+  		console.error(error);
+  		await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
+  	}
+});
+
+client.login(token);
